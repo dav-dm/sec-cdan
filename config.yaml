@@ -1,0 +1,122 @@
+# config.yaml
+
+# DATA, DATASET
+base_data_path: "../../data"
+src_dataset:
+trg_dataset:
+
+# INPUT
+num_pkts: 20
+fields: ['PL', 'IAT', 'DIR', 'WIN', 'FLG', 'TTL']
+all_fields: ['PL', 'IAT', 'DIR', 'WIN', 'FLG', 'TTL']
+return_quintuple: # Set True only for xai
+is_flat: False
+pad_value_dir: 0.5
+pad_value: &pad_value -1
+train_test_split: 0.7
+train_val_split: 0.9
+scaler: 'minmax_symlog' # 'minmax_symlog' 'minmax'
+linear_fraction: 1
+# symlog_params:
+#   PL:  [*pad_value, 1500 , 65535]
+#   IAT: [*pad_value, 100000, 180000000]
+#   DIR: [0, 1]
+#   WIN: [*pad_value, 65535]
+#   FLG: [*pad_value, 210]
+#   TTL: [*pad_value, 255]
+symlog_params:
+  PL:  [*pad_value, 64279]
+  IAT: [*pad_value, 196252658]
+  DIR: [0, 1]
+  WIN: [*pad_value, 65535]
+  FLG: [*pad_value, 210]
+  TTL: [*pad_value, 255]
+
+# EXPERIMENT
+seed: 0
+gpu: False
+n_thr:
+deterministic: True
+benchmark: False
+log_dir: "../results"
+n_task: 1
+skip_t1:
+skip_t2:
+approach:
+ckpt_path:
+
+# DL TRAINING
+lr: 0.0001
+optimizer: 'adam'
+sgd_params:
+  momentum: 0.9
+  weight_decay: 0.001
+  nesterov: True
+max_epochs: 100
+min_epochs: 1
+adaptation_strat: '' 
+adapt_lr: 0.0001
+adapt_epochs: 100
+
+# LR SCHEDULER
+lr_strat: 'none'
+sch_monitor: 'loss'
+lrop_mode: 'min'
+lrop_factor: 0.1
+lrop_patience: 5
+cawr_t0: 10
+cawr_t_mult: 1
+cawr_eta_min: 1e-5
+
+# EARLY STOPPING
+es_monitor: 'loss'
+es_mode: 'min'
+es_patience: 10
+es_min_delta: 0
+
+# MODEL CHECKPOINT
+mc_monitor: 'loss'
+mc_mode: 'min'
+
+# DATALOADER
+batch_size: 64
+adapt_batch_size: 64
+num_workers: 0
+pin_memory:
+
+# DL NETWORK
+network: '2dcnn'
+net_scale: 1
+num_classes: 0
+
+# ADDA
+discr_hidden_size: 1024
+wsgrl_alpha: 1.0
+wsgrl_lo: 0.0
+wsgrl_hi: 2.0
+wsgrl_max_iters: 1000
+wsgrl_auto_step: True
+iter_per_epoch: 1000
+
+# MCC
+mcc_t: 2.5
+mcc_alpha: 1
+
+# CDAN
+cdan_entropy:
+cdan_alpha: 1
+
+# LABEL PROPAGATION
+lp_kernel: 'knn'
+lp_gamma: 20
+lp_n_neighbors: 5
+lp_max_iter: 1000
+lp_tol: 0.001
+
+# LABEL SPREADING
+ls_kernel: 'knn'
+ls_gamma: 20
+ls_n_neighbors: 5
+ls_alpha: 0.2
+ls_max_iter: 30
+ls_tol: 0.001
