@@ -57,7 +57,7 @@ class DataSplits:
         return DataModule(
             train_dataset=self.train[:2], # Do not include quintuples
             val_dataset=self.val[:2],
-            test_dataset=self.test[:2],
+            test_dataset=self.test[:2] if self.test is not None else None,
             **kwargs
         )
         
