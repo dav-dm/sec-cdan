@@ -21,12 +21,12 @@ def get_approach_type(approach_name):
 def is_approach_usup(approach_name):
     return approach_name in dl_unsup_approaches + ml_unsup_approaches
 
-def get_approach(approach_name, datamodule=None, fs_task=False, **kwargs):
+def get_approach(approach_name, datamodule=None, **kwargs):
     callbacks = [SaveOutputs(), TimeMeasurement()] # Base callbacks for both ML and DL approaches
     cf = load_config()
     appr_type = kwargs.get('appr_type', None)
     # Deactivate early stopping if the task on trg dataset is few-shot
-    es_patince = cf['es_patience'] if not fs_task else -1
+    es_patince = cf['es_patience']
     
     if appr_type == 'ml':
         return MLModule.get_approach(

@@ -1,4 +1,4 @@
-# adaptable-nids
+# Sec-CDAN
 
 ## Installation
 

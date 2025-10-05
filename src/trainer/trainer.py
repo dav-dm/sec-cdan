@@ -136,7 +136,6 @@ class Trainer:
     def _reset_approach(self, checkpoint_path=None):        
         approach = get_approach(
             approach_name=self.args.approach, 
-            fs_task=self.args.k is not None, 
             **self.dict_args
         )
         # Loads checkpoint from the first task or from checkpoint_path
