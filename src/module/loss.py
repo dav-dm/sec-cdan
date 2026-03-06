@@ -4,7 +4,7 @@ from torchmetrics import Accuracy
 
 from module.gradient_reverse_function import WarmStartGradientReverseLayer
 
-    
+   
 class DomainAdversarialLoss(nn.Module):
     """
     The Domain Adversarial Loss proposed in
@@ -147,5 +147,176 @@ class MinimumClassConfusionLoss(nn.Module):
         # trace is the sum of diagonal elements
         mcc_loss = (class_confusion_matrix.sum() - class_confusion_matrix.trace()) / num_classes
         return mcc_loss     
+    
+    
+class PairwiseBCE(nn.Module):
+    """
+    Binary Cross-Entropy Loss for similarity learning with pairwise probabilities.
+    
+    Computes a variant of binary cross-entropy loss for pairs of probability distributions,
+    where similarity labels indicate whether distributions should be similar (1),
+    dissimilar (-1), or ignored (0).
+    """
+    def forward(self, prob1, prob2, simi):
+        EPS = 1e-7  # Avoid calculating log(0). Use small value of float16.
+        # Validate input dimensions
+        assert len(prob1) == len(prob2) == len(simi), \
+            f'Wrong input size: {len(prob1)}, {len(prob2)}, {len(simi)}'
+        
+        # Compute element-wise product and sum across classes
+        P = prob1.mul(prob2).sum(dim=1)  # shape: [batch_size]
+        
+        # Transform probabilities based on similarity labels
+        # For similar pairs: keep P (we want P to be close to 1)
+        # For dissimilar pairs: transform to 1-P (we want P to be close to 0, so 1-P close to 1)
+        # For ignored pairs: set to 1 (log(1) = 0, no contribution to loss)
+        P_transformed = P.mul(simi).add(simi.eq(-1).type_as(P))
+        
+        # Compute negative log probability with numerical stability
+        neglogP = -torch.log(P_transformed + EPS)
+        
+        # Mask out ignored pairs (simi == 0)
+        mask = simi.ne(0).type_as(neglogP)
+        neglogP_masked = neglogP.mul(mask)
+        
+        # Compute mean over non-ignored pairs
+        if mask.sum() > 0:
+            return neglogP_masked.sum() / mask.sum()
+        else:
+            return neglogP_masked.mean()  # fallback if all pairs are ignored
+    
+    
+class ClusterLoss(nn.Module):
+    """
+    Cluster Loss for semi-supervised learning with pairwise similarity constraints.
+    
+    Computes pairwise similarity constraints between unlabeled samples using either:
+    - Cosine similarity thresholding, or
+    - Top-k rank statistics
+    
+    The loss encourages consistency between predictions from two classifiers
+    for pairs deemed similar based on feature-space relationships.
+    """
+    def __init__(self, num_classes, bce_type, cosine_threshold, topk):
+        super().__init__()
+        self.num_classes = num_classes
+        self.bce_type = bce_type
+        self.cos_thre = cosine_threshold
+        self.topk = topk
+        self.bce = PairwiseBCE()
+                
+    def forward(self, f, l1, l2, y):
+        device = f.device
+        
+        # Create mask for labeled samples (y < num_classes)
+        mask_l = y < self.num_classes  # True for labeled, False for unlabeled 
+        
+        p1, p2 = torch.softmax(l1, dim=1), torch.softmax(l2, dim=1)
+        
+        # Extract features of unlabeled samples only
+        f_ulb = f[~mask_l].detach()  # Detach to prevent gradient flow through features
+        
+        if self.bce_type == 'cosine':
+            
+            f_norm = nn.functional.normalize(f_ulb, dim=1)
+            # Enumerate all unordered pairs of unlabeled samples
+            f_row, f_col = pair_enum(f_norm)
+            # Compute cosine similarity between all pairs
+            # Shape: [n_pairs] where n_pairs = n_ulb * (n_ulb - 1) / 2
+            cos_sim = torch.bmm(
+                f_row.view(f_row.size(0), 1, -1),
+                f_col.view(f_col.size(0), -1, 1)
+            ).squeeze()
+            # Assign similarity targets based on cosine threshold
+            # 1 for similar (cos_sim > threshold), -1 for dissimilar otherwise
+            target_ulb = torch.zeros_like(cos_sim).float() - 1
+            target_ulb[cos_sim > self.cos_thre] = 1
+            
+        elif self.bce_type == 'RK':
+            
+            # Top-k rank statistics
+            rank_idx = torch.argsort(f_ulb, dim=1, descending=True)
+            # Enumerate all unordered pairs of rank indices
+            rank_idx1, rank_idx2 = pair_enum(rank_idx)
+            # Take only top-k features for comparison
+            rank_idx1 = rank_idx1[:, :self.topk]
+            rank_idx2 = rank_idx2[:, :self.topk]
+            # Sort indices to make comparison order-invariant
+            rank_idx1, _ = torch.sort(rank_idx1, dim=1)
+            rank_idx2, _ = torch.sort(rank_idx2, dim=1)
+            # Compute rank difference (L1 distance between rank sets)
+            rank_diff = torch.abs(rank_idx1 - rank_idx2).sum(dim=1)
+            # Assign similarity targets: 1 if identical top-k sets, -1 otherwise
+            target_ulb = torch.ones_like(rank_diff).float().to(device)
+            target_ulb[rank_diff > 0] = -1
+            
+        else:
+            raise ValueError(f"Unknown bce_type: {self.bce_type}. "
+                             f"Expected 'cosine' or 'RK'.")
+                   
+        p1_ulb = p1[~mask_l]
+        p2_ulb = p2[~mask_l]
+        
+        # Enumerate all unordered probability pairs
+        p1_pairs, _ = pair_enum(p1_ulb)
+        _, p2_pairs = pair_enum(p2_ulb)
+        
+        # Compute BCE loss between probability pairs using similarity targets
+        bce_loss = self.bce(p1_pairs, p2_pairs, target_ulb)
+        return bce_loss, target_ulb
+   
+    
+def pair_enum(x):
+    """
+    Helper function for ICON and ClusterLoss.
+    Enumerate all unordered pairs from a batch.
+    """
+    assert x.ndim == 2, f"Expected 2D tensor, got {x.ndim}D"
+    x1 = x.repeat(x.size(0), 1) # [batch_size^2, feature_dim]
+    x2 = x.repeat(1, x.size(0)).view(-1, x.size(1)) # [batch_size^2, feature_dim]
+    return x1, x2
 
-     
+    
+class TsallisEntropy(nn.Module):
+    """
+    Tsallis Entropy Loss for self-training and domain adaptation.
+    """
+    def __init__(self, temperature, alpha):
+        super().__init__()
+        self.temperature = temperature
+        self.alpha = alpha
+        
+    def forward(self, logits):
+        batch_size, _ = logits.shape
+        pred = torch.softmax(logits / self.temperature, dim=1)  # shape: [batch_size, num_classes]
+        entropy_vals = self.entropy(pred).detach()
+        
+        # Compute entropy-based weights: w = 1 + exp(-entropy)
+        # Higher entropy (more uncertain) → lower weight, Lower entropy (confident) → higher weight
+        entropy_weight = 1.0 + torch.exp(-entropy_vals)
+        
+        # Normalize weights to sum to batch_size
+        entropy_weight = (batch_size * entropy_weight / torch.sum(entropy_weight)).unsqueeze(dim=1)
+        
+        # Compute weighted sum of predictions per class: Σ_i w_i * p_i for each class
+        weighted_sum = torch.sum(pred * entropy_weight, dim=0).unsqueeze(dim=0)  # shape: [1, num_classes]
+        
+        # Compute Tsallis entropy loss
+        # L = 1/(α-1) * Σ_i (1/Σ_j w_j - Σ_i p_i^α / Σ_j w_j * w_i)
+        return 1.0 / (self.alpha - 1.0) * torch.sum(
+            (1 / torch.mean(weighted_sum) - torch.sum(pred ** self.alpha / weighted_sum * entropy_weight, dim=-1))
+        )
+            
+    @staticmethod
+    def entropy(predictions, reduction='none'):
+        epsilon = 1e-5  # Small constant to avoid log(0)
+    
+        # Compute entropy: H(p) = -Σ p_i * log(p_i)
+        H = -predictions * torch.log(predictions + epsilon)
+        H = H.sum(dim=1)  # Sum over classes
+        
+        if reduction == 'mean':
+            return H.mean()
+        else:
+            return H
+        

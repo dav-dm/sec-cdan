@@ -1,7 +1,8 @@
 import torch
 from argparse import ArgumentParser
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader
 
+from data.networking_dataset import NetworkingDataset
 from util.config import load_config
 
 
@@ -12,10 +13,13 @@ class DataModule:
         self.adapt_batch_size = kwargs.get('adapt_batch_size', cf['adapt_batch_size'])
         self.num_workers = kwargs.get('num_workers', cf['num_workers'])
         self.pin_memory = kwargs.get('pin_memory', cf['pin_memory'])
+        self.drop_last = kwargs.get('drop_last', cf['drop_last'])
+        self.apply_transformations = kwargs.get('apply_transformations', False)
+        self.poison_ratio = kwargs.get('poison_ratio', cf['poison_ratio'])
 
-        self.train_x, self.train_y = train_dataset
-        self.val_x, self.val_y = val_dataset
-        self.test_x, self.test_y = test_dataset or (None, None)
+        self.train_x, self.train_y, self.train_q = train_dataset
+        self.val_x, self.val_y, self.val_q = val_dataset
+        self.test_x, self.test_y, self.test_q = test_dataset or (None, None, None)
         
         self.approach_type = kwargs.get('appr_type', None)
         self.seed = kwargs.get('seed', cf['seed'])
@@ -33,30 +37,30 @@ class DataModule:
         parser.add_argument('--adapt-batch-size', type=int, default=cf['adapt_batch_size'])
         parser.add_argument('--num-workers', type=int, default=cf['num_workers'])
         parser.add_argument('--pin-memory', action='store_true', default=cf['pin_memory'])
+        parser.add_argument('--drop-last', action='store_true', default=cf['drop_last'])
+        parser.add_argument('--poison-ratio', type=float, default=cf['poison_ratio'])
         return parser
     
     def set_train_dataset(self, dataset):
-        self.train_x, self.train_y = dataset
+        self.train_x, self.train_y, self.train_q = dataset
         
     def set_val_dataset(self, dataset):
-        self.val_x, self.val_y = dataset
+        self.val_x, self.val_y, self.val_q = dataset
         
     def set_test_dataset(self, dataset):
-        self.test_x, self.test_y = dataset
+        self.test_x, self.test_y, self.test_q = dataset
 
     def get_train_data(self):
         
-        if self.approach_type == 'dl':
-            data_tensor = torch.from_numpy(self.train_x).float()
-            labels_tensor = torch.from_numpy(self.train_y).float()
-            
+        if self.approach_type == 'dl':     
             return DataLoader(
-                TensorDataset(data_tensor, labels_tensor),
+                NetworkingDataset(self.train_x, self.train_y, self.train_q),
                 batch_size=self.batch_size,
                 shuffle=True,
                 generator=torch.Generator().manual_seed(self.seed),
                 num_workers=self.num_workers,
                 pin_memory=self.pin_memory,
+                drop_last=self.drop_last,
             )
         else:
             # For ML approaches
@@ -65,12 +69,9 @@ class DataModule:
         
     def get_val_data(self):
         
-        if self.approach_type == 'dl':
-            data_tensor = torch.from_numpy(self.val_x).float()
-            labels_tensor = torch.from_numpy(self.val_y).float()
-            
+        if self.approach_type == 'dl':            
             return DataLoader(
-                TensorDataset(data_tensor, labels_tensor),
+                NetworkingDataset(self.val_x, self.val_y, self.val_q),
                 batch_size=self.batch_size,
                 shuffle=False,
                 generator=torch.Generator().manual_seed(self.seed),
@@ -85,11 +86,9 @@ class DataModule:
     def get_test_data(self):
         
         if self.approach_type == 'dl':
-            data_tensor = torch.from_numpy(self.test_x).float()
-            labels_tensor = torch.from_numpy(self.test_y).float()
-            
             return DataLoader(
-                TensorDataset(data_tensor, labels_tensor),
+                NetworkingDataset(self.test_x, self.test_y, self.test_q,
+                                  poison_ratio=self.poison_ratio),
                 batch_size=self.batch_size,
                 shuffle=False,
                 generator=torch.Generator().manual_seed(self.seed),
@@ -104,16 +103,15 @@ class DataModule:
     def get_adapt_data(self):
         
         if self.approach_type == 'dl':
-            data_tensor = torch.from_numpy(self.train_x).float()
-            labels_tensor = torch.from_numpy(self.train_y).float()
-            
             return DataLoader(
-                TensorDataset(data_tensor, labels_tensor),
+                NetworkingDataset(self.train_x, self.train_y, self.train_q, 
+                                  apply_transform=self.apply_transformations),
                 batch_size=self.adapt_batch_size,
                 shuffle=True,
                 generator=torch.Generator().manual_seed(self.seed),
                 num_workers=self.num_workers,
                 pin_memory=self.pin_memory,
+                drop_last=self.drop_last,
             )
         else:
             # For ML approaches

@@ -1,26 +1,23 @@
 import json
 
 from approach.approach_factory import get_approach
-from data.util import DataSplits, concat_dataset
 from util.directory_manager import DirectoryManager
 
 
 class Trainer:
     """
     The Trainer class is responsible for managing the training and evaluation process.
-    It initializes with the given arguments and datasets, and provides methods to run
+    It initializes with the given arguments, and provides methods to run
     the training, validation, and testing phases using the specified approach.
     """
-    def __init__(self, args, dataset_splits):
+    def __init__(self, args):
         self.args = args
         self.dict_args = vars(args)
-        self.dataset_splits = dataset_splits
         self.dm = DirectoryManager()
         
         
-    def run(self):
-        # Get dataset splits
-        src_splits, trg_splits, self.dict_args['num_classes'] = self.dataset_splits
+    def run(self, data_manager):
+        self.dict_args['num_classes'] = data_manager.num_classes
                         
         self._save_dict_args()
 
@@ -29,82 +26,83 @@ class Trainer:
         print('='*100)
         
         # Handle different training scenarios
-        if self.args.is_appr_unsup:
-            self._handle_sup_src_unsup_trg(approach, src_splits, trg_splits)
+        if self.args.trg_dataset is None:
+            self._handle_sup_src(approach, data_manager)
+        elif self.args.is_appr_unsup:
+            self._handle_sup_src_unsup_trg(approach, data_manager)
         else:
-            self._handle_sup_src_sup_trg(approach, src_splits, trg_splits)
+            self._handle_sup_src_sup_trg(approach, data_manager)
             
+    
+    def _handle_sup_src(self, approach, data_manager):
+        # Train, validation, and test only on src_dataset
+        approach.datamodule = data_manager.get_datamodule(split='src')
+        self._fit_val(approach)
+        self._test(approach)
         
-    def _handle_sup_src_unsup_trg(self, approach, src_splits, trg_splits):
+        
+    def _handle_sup_src_unsup_trg(self, approach, data_manager):
         """
         Handle unsupervised domain adaptation scenario.
         """
         if self.args.n_tasks == 1:
             # n_task == 1 -> monolithic training (only for ML semi-sup appoaches)
             # Combine src_dataset and trg_dataset train/val splits (trg train is unsupervised)
-            combined_train = concat_dataset(src_splits.train, trg_splits.train, unsup='d2')
-            combined_val = concat_dataset(src_splits.val, trg_splits.val)
-            approach.datamodule = DataSplits(
-                train=combined_train,
-                val=combined_val,
-                test=None
-            ).get_datamodule(**self.dict_args)
+            approach.datamodule = data_manager.concat_src_trg(unsup_trg=True)
             self._fit_val(approach)
-            self._cross_dataset_test(approach, src_splits, trg_splits)
+            self._cross_dataset_test(approach, data_manager.src_splits, data_manager.trg_splits)
         else:
             # n_task == 2 -> sequential training
-            src_datamodule = src_splits.get_datamodule(**self.dict_args)
+            src_datamodule = data_manager.get_datamodule(split='src')
             if not self.args.skip_t1:
                 # Train and val on src
                 approach.datamodule = src_datamodule # Supervised data from src
                 print(f'[Trainer] Starting training on source dataset: {self.args.src_dataset}')
                 self._fit_val(approach)
+                
+            checkpoint_path = self.args.ckpt_path or approach.checkpoint_path
 
             self.dm.change_log_dir(task='trg') # Switch log_dir to trg 
             
             # Target adaptation
-            approach = self._reset_approach(checkpoint_path=self.args.ckpt_path)
+            approach = self._reset_approach(checkpoint_path)
             approach.task = 'trg'
-            approach.datamodule = trg_splits.get_datamodule(**self.dict_args) # Unsupervised data from trg
+            approach.datamodule = data_manager.get_datamodule(split='trg') # Unsupervised data from trg
             print(f'[Trainer] Starting training on target dataset: {self.args.trg_dataset}')
             self._adapt_val(approach, train_dataloader=src_datamodule.get_adapt_data())
-            self._cross_dataset_test(approach, src_splits, trg_splits) 
+            self._cross_dataset_test(approach, data_manager.src_splits, data_manager.trg_splits) 
             
             
-    def _handle_sup_src_sup_trg(self, approach, src_splits, trg_splits):
+    def _handle_sup_src_sup_trg(self, approach, data_manager):
         """
         Handle monolithic and sequential training on source and target.
         """
         if self.args.n_tasks == 1:
             # n_task == 1 -> monolithic training
             # Combine src_dataset and trg_dataset train/val splits
-            combined_train = concat_dataset(src_splits.train, trg_splits.train)
-            combined_val = concat_dataset(src_splits.val, trg_splits.val)
-            approach.datamodule = DataSplits(
-                train=combined_train,
-                val=combined_val,
-                test=None
-            ).get_datamodule(**self.dict_args)
+            approach.datamodule = data_manager.concat_src_trg()
             self._fit_val(approach)
-            self._cross_dataset_test(approach, src_splits, trg_splits)
+            self._cross_dataset_test(approach, data_manager.src_splits, data_manager.trg_splits)
         else:
             # n_task == 2 -> sequential training
             if not self.args.skip_t1:
                 # Train and val on src
-                approach.datamodule = src_splits.get_datamodule(**self.dict_args)
+                approach.datamodule = data_manager.get_datamodule(split='src')
                 print(f'[Trainer] Starting training on source dataset: {self.args.src_dataset}')
                 self._fit_val(approach)
+            
+            checkpoint_path = self.args.ckpt_path or approach.checkpoint_path
             
             self.dm.change_log_dir(task='trg') # Switch the log_dir to trg 
             
             # Target adaptation
             if not self.args.skip_t2:
-                approach = self._reset_approach(checkpoint_path=self.args.ckpt_path)
+                approach = self._reset_approach(checkpoint_path)
                 approach.task = 'trg'
-                approach.datamodule = trg_splits.get_datamodule(**self.dict_args)
+                approach.datamodule = data_manager.get_datamodule(split='trg')
                 print(f'[Trainer] Starting training on target dataset: {self.args.trg_dataset}')
                 self._adapt_val(approach)
-            self._cross_dataset_test(approach, src_splits, trg_splits)
+            self._cross_dataset_test(approach, data_manager.src_splits, data_manager.trg_splits)
         
         
     def _cross_dataset_test(self, approach, src_splits, trg_splits):
@@ -133,15 +131,12 @@ class Trainer:
             approach.datamodule.set_test_dataset(test_dataset)     
         approach.test()
      
-    def _reset_approach(self, checkpoint_path=None):        
-        approach = get_approach(
-            approach_name=self.args.approach, 
-            **self.dict_args
-        )
+    def _reset_approach(self, checkpoint_path):        
+        approach = get_approach(approach_name=self.args.approach, **self.dict_args)
         # Loads checkpoint from the first task or from checkpoint_path
-        approach.load_checkpoint(checkpoint_path or self.dm.checkpoint_path) 
-        print(f'[Trainer] Loaded approach state from {checkpoint_path or self.dm.checkpoint_path}')
-        return approach
+        approach.load_checkpoint(checkpoint_path) 
+        print(f'[Trainer] Loaded approach state from {checkpoint_path}')
+        return approach  
             
     def _save_dict_args(self):
         with open(f'{self.dm.log_dir}/dict_args.json', 'w') as f:

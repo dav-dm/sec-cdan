@@ -6,5 +6,7 @@ from .baseline import Baseline
 from .adda import ADDA
 from .mcc import MCC
 from .sec_cdan import SecCDAN
+from .icon import ICON
 
-from .approach_factory import get_approach, get_approach_type, is_approach_usup
+from .approach_factory import get_approach, get_approach_type, is_approach_unsupervised, \
+    approach_requires_transformations

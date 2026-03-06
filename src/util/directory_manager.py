@@ -16,9 +16,7 @@ class DirectoryManager:
             log_dir_ver = base_log_dir / f'{round(time.time())}' / 'src'
             log_dir_ver.mkdir(parents=True, exist_ok=True)
             self.log_dir = log_dir_ver
-
-            # checkpoint_path is set when a network is saved on the disk (in base_network.py)
-            self.checkpoint_path = None 
+            
             self.initialized = True
 
     def _ensure_directory(self, path):

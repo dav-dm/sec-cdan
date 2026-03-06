@@ -1,8 +1,5 @@
-import numpy as np
 import torch
 from torch.utils.data import DataLoader
-
-from data.data_module import DataModule
 
 
 class InfiniteDataIterator:
@@ -42,33 +39,4 @@ class InfiniteDataIterator:
             return {k: self.send_to_device(v, device) for k, v in data.items()}
         else:
             return data
-        
-        
-class DataSplits:
-    """
-    A container for train/val/test splits.
-    """
-    def __init__(self, train, val, test):
-        self.train = train
-        self.val = val
-        self.test = test
-
-    def get_datamodule(self, **kwargs):
-        return DataModule(
-            train_dataset=self.train[:2], # Do not include quintuples
-            val_dataset=self.val[:2],
-            test_dataset=self.test[:2] if self.test is not None else None,
-            **kwargs
-        )
-        
-def concat_dataset(d1, d2, unsup=None):
-    x1, y1 = d1
-    x2, y2 = d2
-    
-    if unsup == 'd1':
-        y1 = np.full_like(y1, -1)
-    elif unsup == 'd2':
-        y2 = np.full_like(y2, -1)
-    
-    return np.concatenate([x1, x2]), np.concatenate([y1, y2])
-        
+         

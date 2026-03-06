@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from callback.callback_lib import Callback
+from util.directory_manager import DirectoryManager
 
 
 class ModelCheckpoint(Callback):
@@ -44,7 +45,10 @@ class ModelCheckpoint(Callback):
             if self.ckpt_path is not None:
                 Path(self.ckpt_path).unlink(missing_ok=True)  # Remove old checkpoint_ep.pt
             self.best_score = current
-            self.ckpt_path = module.save_checkpoint(f'{self.checkpoint_filename}_{epoch+1}')
+            dm = DirectoryManager()
+            path = dm.mkdir('checkpoint') # Create checkpoint directory if it doesn't exist
+            checkpoint_path = f'{path}/{self.checkpoint_filename}_{epoch+1}.pt'
+            self.ckpt_path = module.save_checkpoint(checkpoint_path)
             
     def _load_checkpoint(self, module, phase):
         if self.ckpt_path is None:

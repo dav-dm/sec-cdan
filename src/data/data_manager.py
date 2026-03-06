@@ -1,9 +1,9 @@
 import numpy as np
-from sklearn.model_selection import train_test_split
 
-from data.util import DataSplits
-from data.data_reader import get_data_labels
-from util.config import load_config
+from data.data_module import DataModule
+from data.splits import DataSplits
+from data.reader import get_data_labels
+from data.splits import train_val_test_split
 
 
 class DataManager:
@@ -14,74 +14,82 @@ class DataManager:
         self.args = args
         self.seed = self.args.seed
         
-    def get_dataset_splits(self):
-        # Loads source and target datasets based on provided arguments.
+    def prepare_datasets(self):
         dataset_args = {
             'num_pkts': self.args.num_pkts,
             'fields': self.args.fields,
             'is_flat': self.args.is_flat,
             'seed': self.args.seed,
         }
-        
-        # Splits the source dataset and, if present, also the target dataset.
-        # It also sets the number of classes and checks for compatibility.
+                    
         src_dataset = get_data_labels(dataset=self.args.src_dataset, **dataset_args)
-        src_splits, num_classes = self._train_val_test_split(dataset=src_dataset)
+        self.src_splits = train_val_test_split(dataset=src_dataset, seed=self.seed)
+        self.num_classes = self.src_splits.num_classes
         
         if self.args.trg_dataset is not None:
             trg_dataset = get_data_labels(dataset=self.args.trg_dataset, **dataset_args)
-            trg_splits, trg_num_classes = self._train_val_test_split(dataset=trg_dataset)
+            self.trg_splits = train_val_test_split(dataset=trg_dataset, seed=self.seed)
             
-            assert num_classes == trg_num_classes, (
-                'Mismatch between the classes of the source and target datasets'
-            )            
+            if self.src_splits.num_classes != self.trg_splits.num_classes:
+                raise ValueError(
+                    'Mismatch between the classes of the source and target datasets'
+                )
         else:
-            trg_splits = None
+            self.trg_splits = None
             
-        return src_splits, trg_splits, num_classes
-    
-    
-    def _train_val_test_split(self, dataset):
+            
+    def get_datamodule(self, split='src'):
         """
-        Splits the dataset into training, validation, and test sets.
-        Conditionally includes quintuples if self.args.return_quintuple is True.
+        Returns a DataModule for the specified dataset split ('src' or 'trg').
         """
-        cf = load_config()
-        return_quintuple = getattr(self.args, 'return_quintuple', False)
+        if split == 'src':
+            splits = self.src_splits
+        elif split == 'trg':
+            splits = self.trg_splits
+        else:
+            raise ValueError("split must be either 'src' or 'trg'")
         
-        arrays = [dataset['data'], dataset['labels']]
-        if return_quintuple:
-            arrays.append(dataset['quintuple'])
-
-        # First split: entire dataset to train_val + test
-        split1 = train_test_split(
-            *arrays,
-            train_size=cf['train_test_split'],
-            random_state=self.seed,
-            stratify=arrays[1]  # Always use full labels for stratification
+        return DataModule(
+            train_dataset=splits.train, # Includes data, labels, quintuple
+            val_dataset=splits.val,
+            test_dataset=splits.test,
+            **vars(self.args)
         )
-        train_val_arrays = split1[0::2]  # Every even-indexed element
-        test_arrays = split1[1::2]       # Every odd-indexed element
-
-        # Second split: train_val to train + val
-        split2 = train_test_split(
-            *train_val_arrays,
-            train_size=cf['train_val_split'],
-            random_state=self.seed,
-            stratify=train_val_arrays[1]  # Stratify by train_val labels
+        
+        
+    def concat_src_trg(self, unsup_trg=False):
+        """
+        Concatenates source and target datasets for training and validation.
+        If unsup_trg is True, target training data is treated as unlabeled.
+        """        
+        combined_train = self._concat_dataset(
+            self.src_splits.train,
+            self.trg_splits.train,
+            unsup='d2' if unsup_trg else None
         )
-        train_arrays = split2[0::2]
-        val_arrays = split2[1::2]
-
-        if return_quintuple:
-            return DataSplits(
-                train=(train_arrays[0], train_arrays[1], train_arrays[2]), # data, labels, quintuple
-                val=(val_arrays[0], val_arrays[1], val_arrays[2]),
-                test=(test_arrays[0], test_arrays[1], test_arrays[2])
-            ), len(np.unique(arrays[1]))
-        else:
-            return DataSplits(
-                train=(train_arrays[0], train_arrays[1]), # data, labels
-                val=(val_arrays[0], val_arrays[1]),
-                test=(test_arrays[0], test_arrays[1])
-            ), len(np.unique(arrays[1]))
+        combined_val = self._concat_dataset(
+            self.src_splits.val,
+            self.trg_splits.val
+        )
+        combined_splits = DataSplits(
+            train=combined_train,
+            val=combined_val,
+            test=None
+        )
+        return DataModule(
+            train_dataset=combined_splits.train,
+            val_dataset=combined_splits.val,
+            test_dataset=None,
+            **vars(self.args)
+        )     
+        
+    def _concat_dataset(self, d1, d2, unsup=None):
+        x1, y1, q1 = d1
+        x2, y2, q2 = d2
+        
+        if unsup == 'd1':
+            y1 = np.full_like(y1, -1)
+        elif unsup == 'd2':
+            y2 = np.full_like(y2, -1)
+        
+        return np.concatenate([x1, x2]), np.concatenate([y1, y2]), np.concatenate([q1, q2]) 

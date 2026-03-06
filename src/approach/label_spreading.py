@@ -51,7 +51,6 @@ class LabelSpreading(MLModule):
         return parser
     
     def _fit(self, data, labels):
-        print(np.unique(labels, return_counts=True))
         self.classifier.fit(data, labels)
 
     def _predict(self, data, labels):

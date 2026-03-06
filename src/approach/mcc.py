@@ -5,7 +5,7 @@ from torchmetrics import Accuracy, F1Score
 from tqdm import tqdm
 
 from approach.dl_module import DLModule
-from data.util import InfiniteDataIterator
+from data.infinite_data_iterator import InfiniteDataIterator
 from module.loss import MinimumClassConfusionLoss
 from util.config import load_config
 

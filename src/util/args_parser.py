@@ -11,8 +11,10 @@ from approach import (
     ADDA,
     MCC,
     SecCDAN,
+    ICON,
     get_approach_type,
-    is_approach_usup,
+    is_approach_unsupervised,
+    approach_requires_transformations
 )
 
 
@@ -27,6 +29,7 @@ def parse_arguments():
     parser = ADDA.add_appr_specific_args(parser)
     parser = MCC.add_appr_specific_args(parser)
     parser = SecCDAN.add_appr_specific_args(parser)
+    parser = ICON.add_appr_specific_args(parser)
     parser = DataModule.add_argparse_args(parser)
     parser = WarmStartGradientReverseLayer.add_specific_args(parser)
     parser.add_argument('--seed', type=int, default=cf['seed'], help='Seed for reproducibility')
@@ -63,13 +66,11 @@ def parse_arguments():
     args = parser.parse_args()
     
     args.appr_type = get_approach_type(args.approach) 
-    args.is_appr_unsup = is_approach_usup(args.approach)
+    args.is_appr_unsup = is_approach_unsupervised(args.approach)
+    args.apply_transformations = approach_requires_transformations(args.approach)
     
     if args.src_dataset is None:
         raise ValueError(f'Source Dataset is None')
-    
-    if args.trg_dataset is None:
-        raise ValueError(f'Target Dataset is None')
     
     if args.trg_dataset==args.src_dataset:
         raise ValueError(f"Target dataset cannot be the same as source dataset: '{args.src_dataset}")

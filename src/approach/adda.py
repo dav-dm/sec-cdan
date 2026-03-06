@@ -4,7 +4,7 @@ from tqdm import tqdm
 from copy import deepcopy
 
 from approach.dl_module import DLModule
-from data.util import InfiniteDataIterator
+from data.infinite_data_iterator import InfiniteDataIterator
 from module.domain_discriminator import DomainDiscriminator
 from module.gradient_reverse_function import WarmStartGradientReverseLayer
 from module.loss import DomainAdversarialLoss

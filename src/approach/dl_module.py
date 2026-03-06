@@ -7,7 +7,6 @@ from torch import optim
 from torchmetrics import Accuracy, F1Score
 
 from util.config import load_config
-from util.directory_manager import DirectoryManager
 from network.network_factory import build_network
 
 disable_tqdm = not sys.stdout.isatty()
@@ -16,9 +15,10 @@ dl_approaches = {
     'adda' : 'ADDA',
     'mcc' : 'MCC',
     'sec_cdan' : 'SecCDAN',
+    'icon' : 'ICON',
 }
 dl_unsup_approaches = [
-    'adda', 'mcc', 'sec_cdan'
+    'adda', 'mcc', 'sec_cdan', 'icon'
 ]
 
 
@@ -48,6 +48,7 @@ class DLModule:
         self.task = 'src'    
         self.phase = None
         self.outputs = None
+        self.checkpoint_path = None
         
         self.callbacks = callbacks if callbacks is not None else []
         
@@ -330,20 +331,15 @@ class DLModule:
         # for name, param in self.net.named_parameters():
         #     print(name, param.device, torch.sum(param).item())
         
-    def save_checkpoint(self, filename):
+    def save_checkpoint(self, path):
         """
         Saves the current state of the network and optimizer to a file.
         """
         # for name, param in self.net.named_parameters():
-        #     print(name, param.device, torch.sum(param).item())
-        dm = DirectoryManager()
-        path = dm.mkdir('checkpoint')
-        checkpoint_path = f'{path}/{filename}.pt'
-        dm.checkpoint_path = checkpoint_path # Save the checkpoint path in the DirectoryManager
-        
+        #     print(name, param.device, torch.sum(param).item()) 
+        self.checkpoint_path = path       
         torch.save({
             'net_state_dict': self.net.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
-        }, checkpoint_path)
-        return checkpoint_path
-        
+        }, self.checkpoint_path)
+        return self.checkpoint_path

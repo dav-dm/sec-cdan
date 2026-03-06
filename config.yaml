@@ -44,6 +44,8 @@ skip_t1:
 skip_t2:
 approach:
 ckpt_path:
+k:
+poison_ratio: 0
 
 # DL TRAINING
 lr: 0.0001
@@ -83,6 +85,7 @@ batch_size: 64
 adapt_batch_size: 64
 num_workers: 0
 pin_memory:
+drop_last: False
 
 # DL NETWORK
 network: '2dcnn'
@@ -105,6 +108,18 @@ mcc_alpha: 1
 # CDAN
 cdan_entropy:
 cdan_alpha: 1
+
+# ICON
+cluster_bce_type: 'RK'
+cosine_threshold: -1
+topk: 5
+icon_threshold: 0.7
+tsallis_temperature: 2.0
+tsallis_alpha: 1.9
+back_cluster_start_epoch: 0
+w_transfer: 1.0
+w_self_training: 1.0
+w_inv: 0.5
 
 # LABEL PROPAGATION
 lp_kernel: 'knn'
