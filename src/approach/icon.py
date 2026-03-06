@@ -15,7 +15,8 @@ disable_tqdm = not sys.stdout.isatty()
 
 class ICON(DLModule):
     """
-    [[Link to Source Code]]()
+    [[Link to Source Code]](https://github.com/yue-zhongqi/ICON/tree/master)
+ is a class that implements the approach described in "Make the U in UDA Matter: Invariant Consistency Learning for Unsupervised Domain Adaptation"
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

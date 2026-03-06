@@ -61,6 +61,8 @@ The following options are defined in [`data_module.py`](src/data/data_module.py)
 - `--adapt-batch-size [int]`: Batch size for adaptation.  
 - `--num-workers [int]`: Number of worker threads for data loading.  
 - `--pin-memory`: Enable pinned memory for faster data transfer to GPU.
+- `--drop-last`: Drop the last incomplete batch if the dataset size is not divisible by the batch size.  
+- `--poison-ratio [float]`: Controls the strength of the poisoned samples.
 
 ### Approach Arguments
 
@@ -111,6 +113,19 @@ The framework implements approaches from the Unsupervised Domain Adaptation lite
     -   `--adapt-lr [float]`: Learning rate for adaptation.
     -   `--adapt-epochs [int]`: Number of epochs for adaptation.
     -   `--iter-per-epoch [int]`: Number of iterations per epoch during the adaptation phase.
+
+1.  ***Invariant CONsistency learning (ICON)*** - [`icon.py`](src/approach/icon.py)
+
+    -   `--icon-threshold [float]`: Confidence threshold used to select pseudo-labels for self-training on the target domain.
+    -   `--cluster-bce-type [str]`: Type of BCE loss used in the clustering objective.
+    -   `--cosine-threshold [float]`: Cosine similarity threshold.
+    -   `--topk [int]`: Number of nearest neighbors considered when constructing cluster-based similarity pairs.
+    -   `--tsallis-temperature [float]`: Temperature parameter used in the Tsallis entropy loss.
+    -   `--tsallis-alpha [float]`: Alpha parameter controlling the shape of the Tsallis entropy loss.
+    -   `--w-transfer [float]`: Weight applied to the entropy-based transfer loss.
+    -   `--w-self-training [float]`: Weight applied to the self-training loss on pseudo-labeled target samples.
+    -   `--w-inv [float]`: Weight applied to the invariant consistency loss.
+    -   `--back-cluster-start-epoch [int]`: Epoch at which the backward clustering loss starts being applied.
 
 2.  ***Minimum Class Confusion (MCC)*** - [`mcc.py`](src/approach/mcc.py)
     -   `--mcc-t [float]`: Temperature parameter for the MCC loss.
