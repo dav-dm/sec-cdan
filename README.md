@@ -205,6 +205,7 @@ Otherwise, it falls back to `xargs`.
 We thank the following open-source implementations that were used in this work:
 
 - [Transfer-Learning-Library](https://github.com/thuml/Transfer-Learning-Library)
+- [ICON](https://github.com/yue-zhongqi/ICON)
 - [GNU parallel](https://www.gnu.org/software/parallel/)
 
 ## Citation
